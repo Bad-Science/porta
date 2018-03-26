@@ -16,21 +16,15 @@ Commands:
     -S -u user -p ports     Set open ports for user and update firewall rules
     -A -u user -p ports     Append open ports for user and update firewall rules
     -R -u user -p ports     Remove open ports for user and update firewall rules
-    -D -u user              Remove all open ports for user and update firewall rules
+    -F -u user              Flush user from config and flush firewall rules
     -X                      Apply firewall rules
 
 Arguments:
     user    UNIX username
-    ports   comma separated list of port numbers
+    ports   comma separated list of port numbers OR 'none'
 
 EOF 1<&2
     exit 1
-}
-
-function ensure_config () {
-    local config_file=$1
-    mkdir -p ${dirname "${config_file}"}
-    touch -a $config_file
 }
 
 # Config File Structure:
@@ -41,32 +35,24 @@ function ensure_config () {
 # [user.alex]
 #   tcp 4000
 #   tcp 4001
+# [user.ayushi]
 #
-# Config Loaded Structure:
+# Config In-Memory Structure:
 #
-# USER_MAP[ada]=tcp:3000,tcp:3001
-# USER_MAP[alex]=tcp:4000,tcp:4001
+# USER_MAP[ada]="tcp:3000,tcp:3001"
+# USER_MAP[alex]="tcp:4000,tcp:4001"
+# USER_MAP[ayushi]=""
 
-function set_user_ports () {
-    
-}
-
-function append_user_port () {
-
-}
-
-function remove_user_port () {
-
-}
-
-function remove_all_user_ports () {
-
+function touch_config () {
+    local config_file=$1
+    mkdir -p ${dirname "${config_file}"}
+    touch -a $config_file
 }
 
 function load_config () {
     local config_file=$1
     local current_user
-    ensure_config $config_file
+    touch_config $config_file
     while IFS= read -r line
     do
         line="${line%%\#*}"
@@ -88,6 +74,33 @@ function load_config () {
 
 function write_config () {
     local config_file=$1
+    touch_config $config_file
+}
+
+function set_user_ports () {
+    local target_user=$1
+    local allowed_ports=$2
+    if [[ $allowed_ports == "none" ]]; then
+        allowed_ports=""
+    fi
+    USER_MAP[$target_user]=allowed_ports
+}
+
+function append_user_ports () {
+    echo "Not Implemented" 1<&2
+    exit 1
+}
+
+function remove_user_ports () {
+    echo "Not Implemented" 1<&2
+    exit 1
+}
+
+function flush_user () {
+    local target_user=$1
+    local chain_name="allowed_ports_for_$target_user"
+    unset USER_MAP[$target_user]
+    iptables -F $chain_name
 }
 
 function apply_rules () {
@@ -125,12 +138,12 @@ function sanitize_opt_ports () {
 
 }
 
-while getopts "SARDXu:p:" OPTION; do
+while getopts "SARFXu:p:" OPTION; do
   case "$OPTION" in
     S) OPT_MODE="SET" ;;
     A) OPT_MODE="APPEND" ;;
     R) OPT_MODE="REMOVE" ;;
-    D) OPT_MODE="DELETE" ;;
+    F) OPT_MODE="FLUSH" ;;
     X) OPT_MODE="APPLY" ;;
     u) OPT_USER=$OPTARG ;;
     p) OPT_PORTS=$OPTARG ;;
@@ -153,8 +166,8 @@ elif [[ $OPT_MODE == "APPEND" ]]; then
     append_user_ports $OPT_USER $OPT_PORTS
 elif [[ $OPT_MODE == "REMOVE" ]]; then
     remove_user_ports $OPT_USER $OPT_PORTS
-elif [[ $OPT_MODE == "DELETE" ]]; then
-    remove_all_user_ports $OPT_USER
+elif [[ $OPT_MODE == "FLUSH" ]]; then
+    flush_user $OPT_USER
 elif [[ ! $OPT_MODE == "APPLY" ]]; then
     usage
 fi
