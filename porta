@@ -4,6 +4,8 @@ declare DEFAULT_CONFIG_FILE="/etc/porta/porta.conf"
 declare SUPPORTED_PROTOCOLS="tcp|udp|udplite|icmp|icmpv6|esp|ah|sctp|mh|all"
 declare SECTION_USER_REGEX="^\[user\.([a-z_][a-z0-9_]{0,30})\]$"
 declare ENTRY_PORT_REGEX="^(${SUPPORTED_PROTOCOLS})\s+(\d+)$"
+declare OPT_SINGLE_PORT_REGEX="^${SUPPORTED_PROTOCOLS}:\d+$"
+declare OPT_PORTS_REGEX="(^$)|(^none$)|(^${SUPPORTED_PROTOCOLS}:\d+$)"
 declare -A USER_MAP
 
 function usage () {
@@ -21,7 +23,8 @@ Commands:
 
 Arguments:
     user    UNIX username
-    ports   comma separated list of port numbers OR 'none'
+    ports   comma separated list of protocols and port numbers OR 'none'
+            e.g., 'tcp:3000,tcp:3001' OR 'none'
 
 EOF 1<&2
     exit 1
@@ -134,10 +137,6 @@ function apply_config () {
     done
 }
 
-function sanitize_opt_ports () {
-
-}
-
 while getopts "SARFXu:p:" OPTION; do
   case "$OPTION" in
     S) OPT_MODE="SET" ;;
@@ -152,8 +151,14 @@ while getopts "SARFXu:p:" OPTION; do
 done
 shift "$(($OPTIND -1))"
 
-if [[ $OPT_MODE =~ ^SET|APPEND|REMOVE|DELETE$ ]]; then
-    if [[ -z {OPT_USER+x} || -z {OPT_PORTS+x} ]]; then
+if [[ $OPT_MODE =~ ^SET|APPEND|REMOVE|FLUSH$ ]]; then
+    if [[ -z {OPT_USER+x} || ! id -u $OPT_USER ]]; then
+        usage
+    fi
+fi
+
+if [[ $OPT_MODE =~ ^SET|APPEND|REMOVE$ ]]; then
+    if [[ -z {OPT_PORTS+x} || ! OPT_PORTS =~ OPT_PORTS_REGEX ]]; then
         usage;
     fi
 fi
